@@ -1,15 +1,17 @@
-﻿using System;
+﻿using IQueryableFilter.JsonConverters;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace IQueryableFilter.Interfaces
 {
-    public interface IFilterComparer : IComparer<IFilterComparer>
+    [JsonConverter(typeof(IFilterComparerConverter))]
+    public interface IFilterComparer
     {
         public int Identifier { get; }
-        public string FilterComparerName { get; }
     }
 }

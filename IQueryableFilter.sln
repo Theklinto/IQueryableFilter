@@ -5,6 +5,8 @@ VisualStudioVersion = 17.6.33723.286
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IQueryableFilter", "IQueryableFilter\IQueryableFilter.csproj", "{5EA9A091-A0BD-46B3-B372-A7F7CE3D64AC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnitTests", "UnitTests\UnitTests.csproj", "{FCE6DE28-7A0B-4D84-96B6-17D8E1D1AFDB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{5EA9A091-A0BD-46B3-B372-A7F7CE3D64AC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5EA9A091-A0BD-46B3-B372-A7F7CE3D64AC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5EA9A091-A0BD-46B3-B372-A7F7CE3D64AC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FCE6DE28-7A0B-4D84-96B6-17D8E1D1AFDB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FCE6DE28-7A0B-4D84-96B6-17D8E1D1AFDB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FCE6DE28-7A0B-4D84-96B6-17D8E1D1AFDB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FCE6DE28-7A0B-4D84-96B6-17D8E1D1AFDB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

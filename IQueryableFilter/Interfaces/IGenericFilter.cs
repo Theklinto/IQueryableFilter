@@ -1,9 +1,12 @@
 ﻿using IQueryableFilter.Enums;
+using IQueryableFilter.JsonConverters;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.Json.Serialization;
 
 namespace IQueryableFilter.Interfaces
 {
+    [JsonConverter(typeof(IGenericFilterConverter))]
     public interface IGenericFilter
     {
         public string FilterType { get; init; }

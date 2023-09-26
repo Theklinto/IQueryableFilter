@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 using System.Reflection;
 
-namespace IQueryableFilter
+namespace IQueryableFilter.Extensions
 {
     public static class IQueryableFilter
     {
@@ -72,66 +72,140 @@ namespace IQueryableFilter
         /// <exception cref="OperationCanceledException"></exception>
         public static IQueryable<T> Filter<T>(this IQueryable<T> query, QueryFilter filter, CancellationToken cancellationToken = default)
         {
-            //Check if search string is empty
-            if (filter.Filters.Any() is false)
+            Expression<Func<T, bool>>? filterExpression = AssembleQueryFilter<T>(filter, cancellationToken);
+
+            if (filterExpression is null)
                 return query;
+            else
+                return query.Where(filterExpression);
+
+        }
+
+        internal static Expression<Func<T, bool>>? AssembleQueryFilter<T>(QueryFilter queryFilter, CancellationToken cancellationToken)
+        {
+            //If no filtercollections are defined, return the query
+            if (queryFilter.FilterCollections.Any() is false)
+                return null;
 
             Type type = typeof(T);
-            List<string> errors = new();
 
-            Expression? expressionBody = null;
-            //Get entity that is queried on ([x] => x...)
-            ParameterExpression entity = Expression.Parameter(type);
+            Expression? combinedFilterExpression = null;
+            //Get parameter that is queried on ([x] => x...)
+            ParameterExpression parameter = Expression.Parameter(type);
+
             //Loop through all properties that are specified in the filter
             //wrongly spelled property names will be ignored
             PropertyInfo[] properties = type.GetProperties();
-            foreach (IGenericFilter filterProperty in filter.Filters)
+
+            FilterException? filterException = null;
+
+            foreach (FilterCollection filterCollection in queryFilter.FilterCollections)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                Expression? filterCollectionExpression = null;
 
-                //Get propertyInfo
-                PropertyInfo? property = properties.FirstOrDefault(x => x.Name == filterProperty.PropertyName);
-                if (property is null)
-                    continue;
-
-                //Errors will be all be collected and returned as one, instead of the first hit
-                #region Guard clauses
-                // If property does not have the attribute decoration return error
-                Type underlayingFilter = filterProperty.GetType();
-                if (filterProperty.AllowPropertyType(property.PropertyType) is false)
+                try
                 {
-                    errors.Add($"({underlayingFilter.Name}) The filter does not allow ussage on type {property.PropertyType}");
-                    continue;
+                    filterCollectionExpression = AssembleFilterCollection(filterCollection, parameter, properties, cancellationToken);
                 }
-                //If property doesnt allow the requested comparison type return error
-                if (filterProperty.AllowFilterComparer(filterProperty.Comparer) is false)
+                catch (FilterException ex)
                 {
-                    errors.Add($"({underlayingFilter.Name}) The filter does not allow the ussage of {filterProperty.Comparer.FilterComparerName} filter");
-                    continue;
+                    if (filterException is null)
+                        filterException = ex;
+                    else
+                        filterException.Errors.AddRange(ex.Errors);
                 }
-                #endregion
 
-                //Build out the expression based on the comparison type
-                Expression? chainExpression = filterProperty.GetExpression(entity, property);
+                if (filterException is not null)
+                    continue;
 
-                if (expressionBody is null)
-                    expressionBody = chainExpression;
-                else if (expressionBody is not null && chainExpression is not null)
-                    expressionBody = filter.FilterMode switch
+                if (combinedFilterExpression is null)
+                    combinedFilterExpression = filterCollectionExpression;
+                else if (combinedFilterExpression is not null && filterCollectionExpression is not null)
+                    combinedFilterExpression = queryFilter.FilterMode switch
                     {
-                        FilterMode.All => Expression.AndAlso(expressionBody, chainExpression),
-                        FilterMode.Some => Expression.OrElse(expressionBody, chainExpression),
-                        _ => expressionBody
+                        FilterMode.All => Expression.AndAlso(combinedFilterExpression, filterCollectionExpression),
+                        FilterMode.Some => Expression.OrElse(combinedFilterExpression, filterCollectionExpression),
+                        _ => combinedFilterExpression
                     };
             }
 
-            if (errors.Any())
-                throw new FilterException(string.Join(Environment.NewLine, errors));
-            else if (expressionBody is null)
-                return query;
+            if (filterException is not null)
+                throw filterException.AssembleException();
+            else if (combinedFilterExpression is null)
+                return null;
             else
-                return query.Where(Expression.Lambda<Func<T, bool>>(expressionBody, entity));
+                return Expression.Lambda<Func<T, bool>>(combinedFilterExpression, parameter);
+        }
 
+        internal static Expression? AssembleFilterCollection(FilterCollection filterCollection, ParameterExpression parameter, PropertyInfo[] parameterProperties, CancellationToken cancellationToken)
+        {
+            FilterException? filterException = null;
+
+            Expression? filterCollectionExpression = null;
+            foreach (IGenericFilter filter in filterCollection.Filters)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                Expression? filterExpression = null;
+                try
+                {
+                    filterExpression = GenerateFilterExpression(filter, parameter, parameterProperties);
+                }
+                catch (FilterException ex)
+                {
+                    if (filterException is null)
+                        filterException = ex;
+                    else
+                        filterException.Errors.AddRange(ex.Errors);
+                }
+
+                if (filterException is not null)
+                    continue;
+
+                if (filterCollectionExpression is null)
+                    filterCollectionExpression = filterExpression;
+                else if (filterCollectionExpression is not null && filterExpression is not null)
+                    filterCollectionExpression = filterCollection.FilterMode switch
+                    {
+                        FilterMode.All => Expression.AndAlso(filterCollectionExpression, filterExpression),
+                        FilterMode.Some => Expression.OrElse(filterCollectionExpression, filterExpression),
+                        _ => filterCollectionExpression
+                    };
+            }
+
+            if (filterException is not null)
+                throw filterException;
+
+            return filterCollectionExpression;
+        }
+
+        internal static Expression? GenerateFilterExpression(IGenericFilter filter, ParameterExpression parameter, PropertyInfo[] parameterProperties)
+        {
+            List<string> errors = new();
+
+            //Get propertyInfo
+            PropertyInfo? property = parameterProperties.FirstOrDefault(x => x.Name
+                .Equals(filter.PropertyName, StringComparison.CurrentCultureIgnoreCase));
+
+            if (property is null || parameter is null || parameterProperties?.Any() is false)
+                return null;
+
+            //Errors will be all be collected and returned as one, instead of the first hit
+            //Get underlaying type to use in error messages
+            Type underlayingFilter = filter.GetType();
+
+            if (filter.AllowPropertyType(property.PropertyType) is false)
+                errors.Add($"({underlayingFilter.Name}) The filter does not allow ussage on type {property.PropertyType}");
+
+            //If property doesnt allow the requested comparison type return error
+            if (filter.AllowFilterComparer(filter.Comparer) is false)
+                errors.Add($"({underlayingFilter.Name}) The filter does not allow the ussage of the provided comparer");
+
+            if (errors.Any())
+                throw new FilterException(errors: errors);
+
+            //Return the expression
+            return filter.GetExpression(parameter, property);
         }
     }
 }

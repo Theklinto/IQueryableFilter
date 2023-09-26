@@ -4,7 +4,7 @@ using IQueryableFilter.Interfaces;
 
 namespace IQueryableFilter.JsonConverters
 {
-    public class GenericFilterPropertyConverter : JsonConverter<IGenericFilter>
+    public class IGenericFilterConverter : JsonConverter<IGenericFilter>
     {
         public override IGenericFilter? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
@@ -21,9 +21,15 @@ namespace IQueryableFilter.JsonConverters
             //Read through all of the reader, otherwise it'll will throw error
             while (reader.Read())
             {
+                if (reader.TokenType == JsonTokenType.EndObject)
+                    return filter;
+
                 //We are searching for the FilterType to determine what to deserialize to
                 if (reader.TokenType != JsonTokenType.PropertyName || filter is not null)
+                {
+                    reader.Skip();
                     continue;
+                }
 
                 //If it's not the FilterType skip
                 bool isFilterProp = reader.GetString()?
@@ -46,10 +52,10 @@ namespace IQueryableFilter.JsonConverters
                     ?? throw new JsonException($"No filter type could be found with the name {filterTypeString}");
 
                 //Decide what type to deserialize as, based on the FilterType
-                filter = JsonSerializer.Deserialize(ref backupReader, filterType) as IGenericFilter;
+                filter = JsonSerializer.Deserialize(ref backupReader, filterType, IQueryableConfig.JsonSerializerOptions) as IGenericFilter;
             }
 
-            return filter;
+            throw new JsonException();
         }
 
         public override void Write(Utf8JsonWriter writer, IGenericFilter value, JsonSerializerOptions options)
